@@ -156,7 +156,7 @@ export async function sendWishlistDigest({ to, items }) {
             <tbody>${itemRows}</tbody>
           </table>
           <div style="margin-top:20px;text-align:center;">
-            <a href="${process.env.CLIENT_URL || 'http://localhost:5173'}/watchlist"
+            <a href="${process.env.CLIENT_URL || 'http://localhost:8080'}/watchlist"
                style="display:inline-block;background:#4f46e5;color:#fff;padding:12px 28px;text-decoration:none;border-radius:6px;font-weight:bold;">
               View Full Watchlist →
             </a>

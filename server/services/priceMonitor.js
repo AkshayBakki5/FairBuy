@@ -8,6 +8,7 @@ import {
   sendWishlistDigest,
 } from './notification.js';
 import { searchAllStores, cleanQuery } from './scraper.js';
+import PriceHistory from '../models/PriceHistory.js';
 
 // ─── Fetch latest price for a single watchlist item ───────────────────────────
 async function fetchLatestPrice(item) {
@@ -92,11 +93,19 @@ async function runPriceCheck() {
         console.log(`💰 "${item.title}": ₹${oldPrice} → ₹${newPrice}`);
       }
 
-      // Update stored price
+      // Update stored price + record in history
       await WatchlistItem.findByIdAndUpdate(item._id, {
         lastPrice: oldPrice,
         price:     newPrice,
       });
+
+      // Upsert price history document
+      const ph = await PriceHistory.findOneAndUpdate(
+        { user: item.user, productId: item.productId },
+        { $setOnInsert: { watchlistItem: item._id, store: item.store } },
+        { upsert: true, new: true },
+      );
+      await ph.addSnapshot(newPrice);
     } catch (err) {
       console.error(`[PriceMonitor] Error for item ${item._id}:`, err.message);
     }

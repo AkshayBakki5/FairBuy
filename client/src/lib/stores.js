@@ -25,7 +25,7 @@ export const STORES = [
     color: 'hsl(270, 70%, 55%)'
   },
   {
-    id: 'swiggy',
+    id: 'instamart',
     name: 'Swiggy Instamart',
     logo: '🟠',
     baseUrl: 'https://www.swiggy.com/instamart',

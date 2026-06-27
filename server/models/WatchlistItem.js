@@ -49,6 +49,9 @@ const watchlistItemSchema = mongoose.Schema(
   }
 );
 
+// Compound index: prevents duplicate entries + fast lookups by user
+watchlistItemSchema.index({ user: 1, productId: 1 }, { unique: true });
+
 const WatchlistItem = mongoose.model('WatchlistItem', watchlistItemSchema);
 
 export default WatchlistItem;

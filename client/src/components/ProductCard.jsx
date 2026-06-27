@@ -127,10 +127,17 @@ const ProductCard = ({ product }) => {
             {product.price != null ? `₹${product.price.toLocaleString('en-IN')}` : 'N/A'}
           </p>
 
-          {/* Original price — shown as-is when available */}
+          {/* Original price */}
           {product.originalPrice != null && (
             <p className="text-xs text-muted-foreground mt-0.5">
               MRP ₹{product.originalPrice.toLocaleString('en-IN')}
+            </p>
+          )}
+
+          {/* Unit price — e.g. ₹8.00 / 100g — makes pack sizes comparable */}
+          {product.unitLabel && (
+            <p className="text-[10px] font-medium text-muted-foreground/80 mt-0.5 tabular-nums">
+              {product.unitLabel}
             </p>
           )}
         </div>
