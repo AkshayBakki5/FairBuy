@@ -55,12 +55,3 @@ export function searchProductsSSE(query, { onStore, onDone, onError }) {
   return () => es.close();
 }
 
-// ── Platform list ─────────────────────────────────────────────────────────────
-export const fetchEnabledPlatforms = async () => {
-  try {
-    const res = await fetch('/api/platforms');
-    return (await res.json()).platforms ?? {};
-  } catch {
-    return {};
-  }
-};

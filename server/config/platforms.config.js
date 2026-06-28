@@ -10,14 +10,14 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const ENABLED_PLATFORMS = {
-  amazon:    true,   // ✅ Priority 1
-  flipkart:  true,   // ✅ Priority 2
-  blinkit:   true,   // ✅ Priority 3 — 10-min delivery
-  zepto:     true,   // ✅ Priority 4 — 10-min delivery
-  instamart: true,   // ✅ Priority 5 — Swiggy Instamart
-  bigbasket: true,   // ✅ Priority 6 — Scheduled grocery
-  myntra:    true,   // ✅ Priority 7 — Fashion
-  ajio:      true,   // ✅ Priority 8 — Fashion
+  amazon:    true,   // ✅ Priority 1 — Amazon Fresh (most reliable)
+  flipkart:  true,   // ✅ Priority 2 — Flipkart Grocery
+  bigbasket: true,   // ✅ Priority 3 — BigBasket
+  blinkit:   true,   // ✅ Priority 4 — Blinkit (needs Delhi location)
+  zepto:     true,   // ✅ Priority 5 — Zepto (needs location)
+  instamart: true,   // ✅ Priority 6 — Swiggy Instamart (needs location)
+  myntra:    false,  // ⛔ Fashion — disabled for grocery comparison
+  ajio:      false,  // ⛔ Fashion — disabled for grocery comparison
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -32,6 +32,5 @@ export const CACHE_CONFIG = {
 // Search settings
 // ─────────────────────────────────────────────────────────────────────────────
 export const SEARCH_CONFIG = {
-  RESULTS_PER_STORE: 5,        // Firecrawl limit per store query
-  TIMEOUT_MS:        15000,    // per-store timeout (15 sec)
+  TIMEOUT_MS: 30_000,  // Playwright navigation timeout (30s)
 };

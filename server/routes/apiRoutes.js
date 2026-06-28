@@ -1,12 +1,7 @@
-import express from "express";
-import PriceHistory from "../models/PriceHistory.js";
-import { protect } from "../middleware/authMiddleware.js";
-import {
-  searchAllStores,
-  searchAllStoresStream,
-  cleanQuery,
-} from "../services/scraper.js";
-import { ENABLED_PLATFORMS } from "../config/platforms.config.js";
+import express from 'express';
+import PriceHistory from '../models/PriceHistory.js';
+import { protect } from '../middleware/authMiddleware.js';
+import { searchAllStores, searchAllStoresStream, cleanQuery } from '../services/scraper.js';
 
 const router = express.Router();
 
@@ -43,9 +38,6 @@ router.post("/search", async (req, res) => {
         total: products.length,
         cheapestPrice: products[0]?.price ?? null,
         cheapestStore: products[0]?.store ?? null,
-        enabledStores: Object.entries(ENABLED_PLATFORMS)
-          .filter(([, v]) => v)
-          .map(([k]) => k),
       },
     });
   } catch (error) {
@@ -133,11 +125,6 @@ router.get("/search/stream", async (req, res) => {
     clearInterval(ping);
     res.end();
   }
-});
-
-// ── GET /api/platforms ────────────────────────────────────────────────────────
-router.get("/platforms", (_req, res) => {
-  res.json({ platforms: ENABLED_PLATFORMS });
 });
 
 // ── GET /api/price-history/:productId ────────────────────────────────────────
