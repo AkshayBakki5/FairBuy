@@ -2,9 +2,9 @@
  * scraper.js — FairBuy Scraping Engine v10
  *
  * Strategy:
- *   Amazon / Flipkart / BigBasket  → Playwright fetchHtml() + Cheerio  AND  Firecrawl (parallel)
- *   Blinkit / Zepto / Instamart    → Playwright page.evaluate() with geolocation + localStorage injection
- *   Best result wins               → whichever channel returns more products is used
+ *   Amazon                         → Playwright fetchHtml() + Cheerio  AND  Firecrawl (parallel, best wins)
+ *   Flipkart / BigBasket           → Playwright page.evaluate() — full browser, city cookies (anti-bot bypass)
+ *   Blinkit / Zepto / Instamart    → Playwright page.evaluate() with Delhi geolocation + localStorage injection
  */
 
 import * as cheerio from 'cheerio';
@@ -310,8 +310,127 @@ async function scrapeInstamart(query) {
   }
 }
 
+async function scrapeFlipkart(query) {
+  const url = `https://www.flipkart.com/search?q=${encodeURIComponent(query)}&marketplace=GROCERY`;
+  console.log(`  🔵 Flipkart → ${url}`);
+  const { page, context } = await newPage();
+  try {
+    await page.route('**/*', route => {
+      if (['image', 'font', 'media'].includes(route.request().resourceType())) return route.abort();
+      route.continue();
+    });
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+    // wait for any product container
+    await page.waitForSelector('div[data-id], ._1AtVbE, .tUxRFH, .DOjaWF, ._75nlfW', { timeout: 12_000 }).catch(() => {});
+    await sleep(2000);
+
+    const products = await page.evaluate(() => {
+      const data = [];
+      // Try containers with data-id first (most reliable Flipkart product identifier)
+      let items = document.querySelectorAll('div[data-id]');
+      if (!items.length) items = document.querySelectorAll('._1AtVbE, .tUxRFH, .DOjaWF, ._75nlfW');
+      items.forEach(el => {
+        try {
+          // Name: try known class names, then any anchor title, then first meaningful text
+          const nameEl = el.querySelector('._4rR01T, .s1Q9rs, .WKTcLC, .KzDlHZ, .wjcEIp, [class*="Name"], [class*="name"]');
+          const title  = nameEl?.innerText?.trim()
+                      || el.querySelector('a[title]')?.getAttribute('title')?.trim()
+                      || '';
+          if (!title || title.length < 3) return;
+
+          // Price: ₹ match across whole element text
+          const priceMatch = el.innerText?.match(/₹\s*(\d[\d,]*)/);
+          const price = priceMatch ? parseInt(priceMatch[1].replace(/,/g, ''), 10) : null;
+          if (!price) return;
+
+          const img  = el.querySelector('img')?.src || '';
+          const href = el.querySelector('a')?.href   || '';
+          data.push({ title: title.substring(0, 120), price, image: img, url: href });
+        } catch (_) {}
+      });
+      return data.slice(0, 30);
+    });
+
+    console.log(`  🔵 Flipkart: ${products.length} products`);
+    return products.map(p => ({ name: p.title, price: p.price, originalPrice: null, discount: null, rating: null, ratingCount: null, image: p.image, url: p.url }));
+  } catch (err) {
+    console.warn(`  ⚠️ Flipkart: ${err.message}`);
+    return [];
+  } finally {
+    await context.close();
+  }
+}
+
+async function scrapeBigBasket(query) {
+  const url = `https://www.bigbasket.com/ps/?q=${encodeURIComponent(query)}&nc=as`;
+  console.log(`  🟢 BigBasket → ${url}`);
+  const { page, context } = await newPage();
+  try {
+    // Set Delhi city cookies before navigation
+    await context.addCookies([
+      { name: 'bb_city',      value: '12',       domain: '.bigbasket.com', path: '/' },
+      { name: 'city_id',      value: '12',       domain: '.bigbasket.com', path: '/' },
+      { name: 'user_city',    value: 'Delhi',    domain: '.bigbasket.com', path: '/' },
+      { name: 'bb_location',  value: 'Delhi',    domain: '.bigbasket.com', path: '/' },
+    ]);
+    await page.route('**/*', route => {
+      if (['image', 'font', 'media'].includes(route.request().resourceType())) return route.abort();
+      route.continue();
+    });
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+    // BigBasket is a React SPA — wait for product cards
+    await page.waitForSelector('[qa="product-card"], [class*="SKUDeck"], [class*="ProdCard"]', { timeout: 15_000 }).catch(() => {});
+    await sleep(3000);
+
+    const products = await page.evaluate(() => {
+      const data = [];
+      const selectors = [
+        '[qa="product-card"]',
+        'li[qa="product-card"]',
+        '[class*="SKUDeck"]',
+        '[class*="ProdCard"]',
+        '[class*="ProductCard"]',
+      ];
+      let items = [];
+      for (const sel of selectors) {
+        items = document.querySelectorAll(sel);
+        if (items.length > 0) break;
+      }
+      items.forEach(el => {
+        try {
+          const nameEl = el.querySelector('[qa="product-name"], h3, h4, [class*="Name"], [class*="name"]');
+          const title  = nameEl?.innerText?.trim() || '';
+          if (!title || title.length < 2) return;
+
+          const priceEl    = el.querySelector('[qa="discounted-price"], [class*="Price"], [class*="price"]');
+          const priceMatch = (priceEl?.innerText || el.innerText)?.match(/₹\s*(\d[\d,]*)/);
+          const price      = priceMatch ? parseInt(priceMatch[1].replace(/,/g, ''), 10) : null;
+          if (!price) return;
+
+          const mrpEl   = el.querySelector('[qa="mrp"], [class*="Mrp"], [class*="mrp"], [class*="strike"]');
+          const origMatch = mrpEl?.innerText?.match(/₹\s*(\d[\d,]*)/);
+          const originalPrice = origMatch ? parseInt(origMatch[1].replace(/,/g, ''), 10) : null;
+
+          const img  = el.querySelector('img')?.src || el.querySelector('img')?.dataset?.src || '';
+          const href = el.querySelector('a')?.href || '';
+          data.push({ title: title.substring(0, 120), price, originalPrice, image: img, url: href });
+        } catch (_) {}
+      });
+      return data.slice(0, 30);
+    });
+
+    console.log(`  🟢 BigBasket: ${products.length} products`);
+    return products.map(p => ({ name: p.title, price: p.price, originalPrice: p.originalPrice || null, discount: null, rating: null, ratingCount: null, image: p.image, url: p.url }));
+  } catch (err) {
+    console.warn(`  ⚠️ BigBasket: ${err.message}`);
+    return [];
+  } finally {
+    await context.close();
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
-// STANDARD STORES: fetchHtml + Cheerio
+// STANDARD STORES: fetchHtml + Cheerio (Amazon only now)
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function fetchHtml(url, storeId) {
@@ -400,12 +519,12 @@ function extractBigBasket(html) {
 
 // ─── Store Registry ───────────────────────────────────────────────────────────
 const STORES = [
-  { id: 'amazon',    name: 'Amazon Fresh',     priority: 1, strategy: 'cheerio',   searchUrl: q => `https://www.amazon.in/s?k=${encodeURIComponent(q)}&i=nowstore`,                                extractor: extractAmazon    },
-  { id: 'flipkart',  name: 'Flipkart Grocery', priority: 2, strategy: 'cheerio',   searchUrl: q => `https://www.flipkart.com/search?q=${encodeURIComponent(q)}&marketplace=GROCERY`,              extractor: extractFlipkart  },
-  { id: 'bigbasket', name: 'BigBasket',         priority: 3, strategy: 'cheerio',   searchUrl: q => `https://www.bigbasket.com/ps/?q=${encodeURIComponent(q)}&nc=as`,                              extractor: extractBigBasket },
-  { id: 'blinkit',   name: 'Blinkit',           priority: 4, strategy: 'evaluate',  searchUrl: q => `https://blinkit.com/s/?q=${encodeURIComponent(q)}`,                   evaluator: scrapeBlinkit   },
-  { id: 'zepto',     name: 'Zepto',             priority: 5, strategy: 'evaluate',  searchUrl: q => `https://www.zeptonow.com/search?query=${encodeURIComponent(q)}`,      evaluator: scrapeZepto     },
-  { id: 'instamart', name: 'Swiggy Instamart',  priority: 6, strategy: 'evaluate',  searchUrl: q => `https://www.swiggy.com/instamart/search?query=${encodeURIComponent(q)}`, evaluator: scrapeInstamart },
+  { id: 'amazon',    name: 'Amazon Fresh',     priority: 1, strategy: 'cheerio',  searchUrl: q => `https://www.amazon.in/s?k=${encodeURIComponent(q)}&i=nowstore`,                                 extractor: extractAmazon    },
+  { id: 'flipkart',  name: 'Flipkart Grocery', priority: 2, strategy: 'evaluate', searchUrl: q => `https://www.flipkart.com/search?q=${encodeURIComponent(q)}&marketplace=GROCERY`,               evaluator: scrapeFlipkart  },
+  { id: 'bigbasket', name: 'BigBasket',         priority: 3, strategy: 'evaluate', searchUrl: q => `https://www.bigbasket.com/ps/?q=${encodeURIComponent(q)}&nc=as`,                               evaluator: scrapeBigBasket },
+  { id: 'blinkit',   name: 'Blinkit',           priority: 4, strategy: 'evaluate', searchUrl: q => `https://blinkit.com/s/?q=${encodeURIComponent(q)}`,                    evaluator: scrapeBlinkit   },
+  { id: 'zepto',     name: 'Zepto',             priority: 5, strategy: 'evaluate', searchUrl: q => `https://www.zeptonow.com/search?query=${encodeURIComponent(q)}`,       evaluator: scrapeZepto     },
+  { id: 'instamart', name: 'Swiggy Instamart',  priority: 6, strategy: 'evaluate', searchUrl: q => `https://www.swiggy.com/instamart/search?query=${encodeURIComponent(q)}`, evaluator: scrapeInstamart },
 ];
 
 function getEnabledStores() {
