@@ -1,10 +1,14 @@
 // client/src/lib/api/api.js
 // All HTTP calls to the backend live here.
 
+// In production (S3 deploy), set VITE_API_BASE_URL=http://your-ec2-ip in .env.production
+// In dev, leave empty — Vite proxy handles /api → localhost:4000
+const BASE = import.meta.env.VITE_API_BASE_URL || '';
+
 // ── Blocking search (kept as fallback) ───────────────────────────────────────
 export const searchProducts = async (query) => {
   try {
-    const response = await fetch('/api/search', {
+    const response = await fetch(`${BASE}/api/search`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query }),
@@ -27,7 +31,7 @@ export const searchProducts = async (query) => {
 // Calls onError(message)      on fatal error.
 // Returns a cleanup function — call it to abort early.
 export function searchProductsSSE(query, { onStore, onDone, onError }) {
-  const url = `/api/search/stream?q=${encodeURIComponent(query)}`;
+  const url = `${BASE}/api/search/stream?q=${encodeURIComponent(query)}`;
   const es = new EventSource(url);
 
   es.addEventListener('store', (e) => {
@@ -54,4 +58,3 @@ export function searchProductsSSE(query, { onStore, onDone, onError }) {
 
   return () => es.close();
 }
-
